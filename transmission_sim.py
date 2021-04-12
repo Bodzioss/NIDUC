@@ -1,50 +1,66 @@
 from channel_sim import BinarySymmetricChannel
+import time
 
-#nadajacy reprezentuje plik
 class Sender:
-	def __init__(self, inputFileName):
-		self._inputFileName = inputFileName
+	def __init__(self):
+		self._ackReceived = False
+		self._ackWaitTime = 0.08
 
-	def readInput(self):
-		inputString = ""
-		with open(self._inputFileName) as inputFile:
-			inputString = inputFile.read()
+	def openConnection(self, receiver, channel):
+		self._connection = Connection(self, receiver, channel)
 
-		return inputString
+	def receiveACK(self, ackFrame):
+		self._ackReceived = True
 
+	def sendData(self, inputFilename):
+		with open(inputFilename) as inputFile:
+			sequenceCounter = 0
+			buff = inputFile.read(1)
+			while(buff != ""):
+				while(self._ackReceived == False):
+					primitiveFrame = PrimitiveFrame(sequenceCounter % 2, ord(buff))
+					self._connection.writeFrame(primitiveFrame)
+					time.sleep(self._ackWaitTime)
+
+				self._ackReceived = False
+				++sequenceCounter
+				buff = inputFile.read(1)
+				
 class Receiver:
-	def __init__(self, outputFileName):
-		self._outputFileName = outputFileName
-		self._receiverBuffer = ""
+	def __init__(self):
+		self._sequenceCounter = 0
 
-	def receive(self, primitiveFrame):
-		charPayload = chr(primitiveFrame.payload)
-		self._receiverBuffer = self._receiverBuffer + charPayload
+	def receiveFrame(self, primitiveFrame):
+		if(primitiveFrame.check(self._sequenceCounter % 2)):
+			self.writeOutput(primitiveFrame.payload)
+			self._connection.writeACK(PrimitiveFrame.makeAckFrame())
+			++self._sequenceCounter
 
-	def writeOutput(self):
-		with open(self._outputFileName, "w") as outputFile:
-			outputFile.write(self._receiverBuffer)
+	def acceptConnection(self, connection):
+		self._connection = connection
+		self._outputFile = open("outputFile", "w")
+
+	def writeOutput(self, byte):
+		try:
+			self._outputFile.write(chr(byte))
+		except OSError as os:
+			print("Operating system error")
+
 
 #abstrakcja polaczenia miedzy Sender a Receiver, poprzez channel
 class Connection:
 	def __init__(self, sender, receiver, channel):
 		self._sender = sender
 		self._receiver = receiver
+		self._receiver.acceptConnection(self)
 		self._channel = channel
 
-	def transferData(self):
-		senderInput = self._sender.readInput()
-		senderInputCharList = [char for char in senderInput]
-		iterator = 0
-		for char in senderInputCharList:
-			primitiveFrame = PrimitiveFrame(iterator % 2, ord(char))
-			transferedData = self._channel.transmitPrimitiveFrame(primitiveFrame)
-			self._receiver.receive(transferedData)
-			++iterator
-		self._receiver.writeOutput()
+	def writeACK(self, ackFrame):
+		self._sender.receiveACK(self._channel.transmitPrimitiveFrame(ackFrame))
 
-
-
+	def writeFrame(self, primitiveFrame):
+		self._receiver.receiveFrame(self._channel.transmitPrimitiveFrame(primitiveFrame))
+		
 #aby nie symulowac czterech warstw OSI, ACK to 0 w payload, sequenceBit
 #oraz 1 w parityBit
 class PrimitiveFrame:
@@ -58,8 +74,19 @@ class PrimitiveFrame:
 		frame.parityBit = 1
 		return frame
 
+	def check(self, expectedSequenceBit):
+		if(self.payload % 2 != self.parityBit or self.sequenceBit != expectedSequenceBit):
+			return False
+		return True
+
 fileName = input("Input file name(in pwd): ")
 
-bscInstance = BinarySymmetricChannel(0.01)
+bitFlipChance = input("Crossover chance(decimal): ")
 
-Connection(Sender(fileName), Receiver("output.txt"), bscInstance).transferData()
+bscInstance = BinarySymmetricChannel(float(bitFlipChance))
+
+sender = Sender()
+
+sender.openConnection(Receiver(), bscInstance)
+
+sender.sendData(fileName)

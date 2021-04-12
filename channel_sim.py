@@ -1,4 +1,5 @@
 import random
+import time
 
 class BinarySymmetricChannel:
 	def __init__(self, p):
@@ -42,4 +43,5 @@ class BinarySymmetricChannel:
 		return primitiveFrame
 
 	def transmitPrimitiveFrame(self, primitiveFrame):
+		time.sleep(0.043)
 		return self._distortPrimitiveFrame(primitiveFrame)
