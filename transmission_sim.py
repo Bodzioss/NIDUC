@@ -23,7 +23,7 @@ class Sender:
 					time.sleep(self._ackWaitTime)
 
 				self._ackReceived = False
-				++sequenceCounter
+				sequenceCounter = sequenceCounter ^ 1
 				buff = inputFile.read(1)
 				
 class Receiver:
@@ -34,7 +34,7 @@ class Receiver:
 		if(primitiveFrame.check(self._sequenceCounter % 2)):
 			self.writeOutput(primitiveFrame.payload)
 			self._connection.writeACK(PrimitiveFrame.makeAckFrame())
-			++self._sequenceCounter
+			self._sequenceCounter = self._sequenceCounter ^ 1
 
 	def acceptConnection(self, connection):
 		self._connection = connection
@@ -66,6 +66,7 @@ class Connection:
 class PrimitiveFrame:
 	def __init__(self, sequenceBit, byte):
 		self.sequenceBit = sequenceBit
+		#zle ustawianie bitu parzystosci
 		self.parityBit = byte % 2
 		self.payload = byte
 
@@ -75,6 +76,7 @@ class PrimitiveFrame:
 		return frame
 
 	def check(self, expectedSequenceBit):
+		#zle sprawdzanie zgodnosci z bitem parzystosci
 		if(self.payload % 2 != self.parityBit or self.sequenceBit != expectedSequenceBit):
 			return False
 		return True
