@@ -1,14 +1,26 @@
 from channel_sim import BinarySymmetricChannel
 import time
+import threading
+
+def generateParityBit(byte):
+	
+	parityBit = False
+	while byte:
+		parityBit = not parityBit
+		byte = byte & (byte - 1)
+
+	return int(parityBit)
 
 class Sender:
-	def __init__(self):
+	def __init__(self, ackWaitTime):
 		self._ackReceived = False
-		self._ackWaitTime = 0.08
+		self._ackSequence = 0
+		self._ackWaitTime = ackWaitTime
 
 	def openConnection(self, receiver, channel):
 		self._connection = Connection(self, receiver, channel)
 
+	#brak sprawdzania poprawnosci ACK, receiver nie nadaje nic innego
 	def receiveACK(self, ackFrame):
 		self._ackReceived = True
 
@@ -19,11 +31,11 @@ class Sender:
 			while(buff != ""):
 				while(self._ackReceived == False):
 					primitiveFrame = PrimitiveFrame(sequenceCounter % 2, ord(buff))
-					self._connection.writeFrame(primitiveFrame)
+					threading.Thread(target=self._connection, args=(primitiveFrame,)).start()
 					time.sleep(self._ackWaitTime)
 
 				self._ackReceived = False
-				++sequenceCounter
+				sequenceCounter = sequenceCounter ^ 1
 				buff = inputFile.read(1)
 				
 class Receiver:
@@ -34,7 +46,7 @@ class Receiver:
 		if(primitiveFrame.check(self._sequenceCounter % 2)):
 			self.writeOutput(primitiveFrame.payload)
 			self._connection.writeACK(PrimitiveFrame.makeAckFrame())
-			++self._sequenceCounter
+			self._sequenceCounter = self._sequenceCounter ^ 1
 
 	def acceptConnection(self, connection):
 		self._connection = connection
@@ -55,18 +67,20 @@ class Connection:
 		self._receiver.acceptConnection(self)
 		self._channel = channel
 
+	def __call__(self, primitiveFrame):
+		self.writeFrame(primitiveFrame)
+
 	def writeACK(self, ackFrame):
 		self._sender.receiveACK(self._channel.transmitPrimitiveFrame(ackFrame))
 
 	def writeFrame(self, primitiveFrame):
 		self._receiver.receiveFrame(self._channel.transmitPrimitiveFrame(primitiveFrame))
 		
-#aby nie symulowac czterech warstw OSI, ACK to 0 w payload, sequenceBit
-#oraz 1 w parityBit
+#ACK to 0 w payload, sequenceBit oraz 1 w parityBit
 class PrimitiveFrame:
 	def __init__(self, sequenceBit, byte):
 		self.sequenceBit = sequenceBit
-		self.parityBit = byte % 2
+		self.parityBit = generateParityBit(byte)
 		self.payload = byte
 
 	def makeAckFrame():
@@ -75,7 +89,7 @@ class PrimitiveFrame:
 		return frame
 
 	def check(self, expectedSequenceBit):
-		if(self.payload % 2 != self.parityBit or self.sequenceBit != expectedSequenceBit):
+		if(generateParityBit(self.payload) != self.parityBit or self.sequenceBit != expectedSequenceBit):
 			return False
 		return True
 
@@ -85,7 +99,7 @@ bitFlipChance = input("Crossover chance(decimal): ")
 
 bscInstance = BinarySymmetricChannel(float(bitFlipChance))
 
-sender = Sender()
+sender = Sender(0.08)
 
 sender.openConnection(Receiver(), bscInstance)
 

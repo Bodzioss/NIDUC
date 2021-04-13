@@ -39,9 +39,10 @@ class BinarySymmetricChannel:
 			primitiveFrame.parityBit = primitiveFrame.parityBit ^ 1
 		
 		primitiveFrame.payload = self._distortByte(primitiveFrame.payload)
-
+		
 		return primitiveFrame
 
 	def transmitPrimitiveFrame(self, primitiveFrame):
-		time.sleep(0.043)
+		#gdy maksymalne opoznienie w dostarczeniu ACK > czasu czekania nadajacego dzieja sie zle rzeczy 
+		time.sleep(random.random() * 0.03)
 		return self._distortPrimitiveFrame(primitiveFrame)
