@@ -200,5 +200,5 @@ sender = Sender(5,3)
 #sender.openConnection(Receiver(), bscInstance)
 sender.openConnection(Receiver(), gilbertInstance)
 
-#sender.sendDataBSC(fileName)
+ #sender.sendDataBSC(fileName)
 sender.sendDataGilbert(fileName)
