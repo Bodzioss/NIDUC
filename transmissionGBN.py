@@ -1,8 +1,13 @@
+import zlib
+
 from channel_sim import BinarySymmetricChannel
 from gilbert import GilbertModel
 import time
 import threading
 
+class Controller():
+    def __init__(self):
+        self.expectedSeq=0
 
 def generateParityBit(byte):
     parityBit = False
@@ -13,68 +18,103 @@ def generateParityBit(byte):
     return int(parityBit)
 
 
-class Sender:
+class Sender():
     def __init__(self, ackWaitTime, winSize):
-        self._ackReceived = True
+        self._ackReceived = False
         self._ackSequence = 0
         self._ackWaitTime = ackWaitTime
+        self.sleepTime=0.2
         self.winSize = winSize
         self.base = 0
         self.nextSeqNum = 0
         self.sentPackets=0
+        self.timeout=0
+        self.sequenceCounter=0
+        self.end=0
+        self.getPackets=0
+        self.isInterupted=0
 
-    def __call__(self, buff,sequenceCounter,nextSeqNum):
-        self.sendPacket(buff,sequenceCounter,nextSeqNum)
-        time.sleep((nextSeqNum-self.base)*10)###
-        print(buff)
+    def __call__(self, buff):
+        while(True):
+            if(self.sentPackets > len(buff)):
+                self.end=1
+                break
+            while (self.nextSeqNum < self.winSize and self.sentPackets <= len(buff)):
+                print("\nWysłano "+str(buff[self.sentPackets]))
+                threading.Thread(target=self.sendPacket, args=(buff[self.sentPackets], self.sequenceCounter, self.sentPackets)).start()
+                threading.Thread(target=self.checkTimeout, args=(self._ackWaitTime, self.sentPackets)).start()
+                self.nextSeqNum += 1
+                if (self.sentPackets < len(buff)):
+                    self.sentPackets += 1
+                time.sleep(self.sleepTime)
+
 
     def openConnection(self, receiver, channel):
         self._connection = Connection(self, receiver, channel)
 
     # brak sprawdzania poprawnosci ACK, receiver nie nadaje nic innego
     def receiveACK(self, ackFrame, seqNumber):
-        if (seqNumber == self.base):
+        print("recived ack " + str(seqNumber) +" "+ str(self.base)+" ")
+        if(seqNumber==self.base):
             self._ackReceived = True
+
 
     def sendDataBSC(self, inputFilename):
         with open(inputFilename) as inputFile:
             buff = inputFile.read()
-        sequenceCounter = 0
-
-        while (self.nextSeqNum < self.base + self.winSize and self.sentPackets<len(buff)):
-            threading.Thread(target=self, args=(buff[self.sentPackets],sequenceCounter, self.nextSeqNum)).start()
-            self.nextSeqNum += 1
-            self.sentPackets += 1
-            if (self.nextSeqNum == self.base + self.winSize):
-                time.sleep(self._ackWaitTime)
-                if (self._ackReceived):
-                    self.base+=1
-                    #self._ackReceived=False
-                    sequenceCounter = sequenceCounter ^ 1
-                else:
-                    self.nextSeqNum -= self.winSize
-                    self.sentPackets -= self.winSize
+        threading.Thread(target=self, args=(buff,)).start()
+        while (self.end == 0):
+            while (self._ackReceived == False and self.timeout == 0 and self.end == 0):
+                a = 0
+            if (self._ackReceived):
+                self.base += 1
+                self.getPackets += 1
+                self._ackReceived = False
+                self.sequenceCounter = self.sequenceCounter ^ 1
+                self.nextSeqNum-=1
+                if len(buff)-self.getPackets<self.winSize:
+                    self.winSize=len(buff)-self.sentPackets
+                if self.getPackets==len(buff):
+                    self.sentPackets+=1
+            else:
+                self.isInterupted = self.nextSeqNum-1
+                self.nextSeqNum = 0
+                self.sentPackets = self.base
+                self.timeout = 0
 
 
     def sendDataGilbert(self, inputFilename):
         with open(inputFilename) as inputFile:
             buff = inputFile.read()
-        sequenceCounter = 0
+        threading.Thread(target=self, args=(buff,)).start()
+        while (self.end == 0):
+            while (self._ackReceived == False and self.timeout == 0 and self.end == 0):
+                a = 0
+            if (self._ackReceived):
+                self.base += 1
+                self.getPackets += 1
+                self._ackReceived = False
+                self.sequenceCounter = self.sequenceCounter ^ 1
+                self.nextSeqNum -= 1
+                if len(buff) - self.getPackets < self.winSize:
+                    self.winSize = len(buff) - self.sentPackets
+                if self.getPackets == len(buff):
+                    self.sentPackets += 1
+            else:
+                self.isInterupted = self.nextSeqNum - 1
+                self.nextSeqNum = 0
+                self.sentPackets = self.base
+                self.timeout = 0
 
-        while (self.nextSeqNum < self.base + self.winSize and self.sentPackets < len(buff)):
-            threading.Thread(target=self, args=(buff[self.sentPackets], sequenceCounter, self.nextSeqNum)).start()
-            self.nextSeqNum += 1
-            self.sentPackets += 1
-            if (self.nextSeqNum == self.base + self.winSize):
-                time.sleep(self._ackWaitTime)
-                if (self._ackReceived):
-                    self.base += 1
-                    # self._ackReceived=False
-                    sequenceCounter = sequenceCounter ^ 1
-                else:
-                    self.nextSeqNum -= self.winSize
-                    self.sentPackets -= self.winSize
 
+
+    def checkTimeout(self,waitTime,sentPackets):
+        time.sleep(waitTime)
+        if(sentPackets==self.getPackets and self.isInterupted == 0):
+            self.timeout=1
+        else:
+            if(self.isInterupted>0):
+                self.isInterupted-=1
 
 
     def sendPacket(self, buff,sequenceCounter,nextSeqNum):
@@ -83,24 +123,18 @@ class Sender:
 
 
 class Receiver:
-    def __init__(self, winSize):
+    def __init__(self):
         self._sequenceCounter = 0
-        self.sentCounter = 0
-        self.winSize = winSize
-        self.bytes = []
 
     def receiveFrame(self, primitiveFrame, seqNumber):
         if (primitiveFrame.check(self._sequenceCounter % 2)):
-          #  self.bytes.append(chr(primitiveFrame.payload()))
-            self.writeOutput(primitiveFrame.payload)
-            self.sentCounter+=1
+            if(seqNumber==controller.expectedSeq):
+                self.writeOutput(primitiveFrame.payload)
+                controller.expectedSeq+=1
             self._connection.writeACK(PrimitiveFrame.makeAckFrame(), seqNumber)
             self._sequenceCounter = self._sequenceCounter ^ 1
 
-       # if (self.sentCounter == self.winSize):
-       #     self.writeOutput( bytes)
-       #    self.sentCounter = 0
-       #     self.bytes.clear()
+
 
     def acceptConnection(self, connection):
         self._connection = connection
@@ -137,14 +171,16 @@ class PrimitiveFrame:
         self.sequenceBit = sequenceBit
         self.parityBit = generateParityBit(byte)
         self.payload = byte
-
+        x= chr(byte)
+        x=x.encode('utf-8')
+        self.crc32=zlib.crc32(x)
     def makeAckFrame():
         frame = PrimitiveFrame(0, 0)
         frame.parityBit = 1
         return frame
 
     def check(self, expectedSequenceBit):
-        if (generateParityBit(self.payload) != self.parityBit or self.sequenceBit != expectedSequenceBit):
+        if (self.crc32 != zlib.crc32((chr(self.payload)).encode('utf-8'))):
             return False
         return True
 
@@ -157,13 +193,12 @@ flipToWrong = input("Flip to bad state chance(decimal): ")
 #bitFlipChance = input("Flip to bad state chance(decimal): ")
 
 #bscInstance = BinarySymmetricChannel(float(bitFlipChance))
-
 gilbertInstance = GilbertModel(float(flowEfficiency),float(flipToGood),float(flipToWrong))
+controller=Controller()
+sender = Sender(5,3)
 
-sender = Sender(0.08,5)
-
-#sender.openConnection(Receiver(5), bscInstance)
-sender.openConnection(Receiver(5), gilbertInstance)
+#sender.openConnection(Receiver(), bscInstance)
+sender.openConnection(Receiver(), gilbertInstance)
 
 #sender.sendDataBSC(fileName)
 sender.sendDataGilbert(fileName)
