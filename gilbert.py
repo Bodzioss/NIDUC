@@ -21,8 +21,7 @@ class GilbertModel:
 
     def _distortPrimitiveFrame(self, primitiveFrame):
         self.tryState()
-        print(self.state)
-        if (self.state):
+        if (self.state==0):
             if (random.random() <= self.flowEfficiency):
                 primitiveFrame.sequenceBit = primitiveFrame.sequenceBit ^ 1
 
