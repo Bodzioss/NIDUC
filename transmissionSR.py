@@ -19,12 +19,13 @@ def generateParityBit(byte):
 
 
 class Sender():
+    global counter
     def __init__(self, ackWaitTime, winSize):
         self._ackReceived = False
         self._nackReceived = False
         self._ackSequence = 0
         self._ackWaitTime = ackWaitTime
-        self.sleepTime=2
+        self.sleepTime=0.1
         self.winSize = winSize
         self.base = 0
         self.nextSeqNum = 0
@@ -39,6 +40,7 @@ class Sender():
         while(True):
             if(self.sentPackets > len(buff)):
                 self.end=1
+                print("counter: " + str(counter))
                 break
             while (self.nextSeqNum < self.winSize and self.sentPackets <= len(buff)):
                 print("\nSend "+str(buff[self.sentPackets]))
@@ -46,7 +48,7 @@ class Sender():
                 self.nextSeqNum += 1
                 if (self.sentPackets < len(buff)):
                     self.sentPackets += 1
-                time.sleep(0.5)
+                time.sleep(0.05)
 
 
     def openConnection(self, receiver, channel):
@@ -63,6 +65,7 @@ class Sender():
             self.lostPacket=seqNumber
 
     def sendDataBSC(self, inputFilename):
+        global counter
         with open(inputFilename) as inputFile:
             buff = inputFile.read()
         threading.Thread(target=self, args=(buff,)).start()
@@ -80,12 +83,14 @@ class Sender():
                 if self.getPackets == len(buff):
                     self.sentPackets += 1
             elif (self._nackReceived and self.sentPackets <= len(buff)):
+                counter = counter + 1
                 print("\nResend " + str(buff[self.lostPacket]))
                 threading.Thread(target=self.sendPacket,
                                  args=(buff[self.lostPacket], self.sequenceCounter, self.lostPacket)).start()
                 self._nackReceived = False
 
     def sendDataGilbert(self, inputFilename):
+        global counter
         with open(inputFilename) as inputFile:
             buff = inputFile.read()
         threading.Thread(target=self, args=(buff,)).start()
@@ -103,12 +108,10 @@ class Sender():
                 if self.getPackets == len(buff):
                     self.sentPackets += 1
             elif (self._nackReceived and self.sentPackets <= len(buff)):
+                counter = counter + 1
                 print("\nResend "+str(buff[self.lostPacket]))
                 threading.Thread(target=self.sendPacket, args=(buff[self.lostPacket], self.sequenceCounter, self.lostPacket)).start()
                 self._nackReceived=False
-
-
-
 
 
 
@@ -182,22 +185,22 @@ class PrimitiveFrame:
             return False
         return True
 
-
+counter = 0
 fileName = input("Input file name(in pwd): ")
 
-flowEfficiency = input("Bit flip chance(decimal): ")
-flipToGood = input("Flip to good state chance(decimal): ")
-flipToWrong = input("Flip to bad state chance(decimal): ")
+#flowEfficiency = input("Bit flip chance(decimal): ")
+#flipToGood = input("Flip to good state chance(decimal): ")
+#flipToWrong = input("Flip to bad state chance(decimal): ")
 windowSize = input("Window size: ")
-#bitFlipChance = input("Flip to bad state chance(decimal): ")
+bitFlipChance = input("Flip to bad state chance(decimal): ")
 
-#bscInstance = BinarySymmetricChannel(float(bitFlipChance))
-gilbertInstance = GilbertModel(float(flowEfficiency),float(flipToGood),float(flipToWrong))
+bscInstance = BinarySymmetricChannel(float(bitFlipChance))
+#gilbertInstance = GilbertModel(float(flowEfficiency),float(flipToGood),float(flipToWrong))
 controller=Controller()
-sender = Sender(5,int(windowSize))
+sender = Sender(1,int(windowSize))
 
-#sender.openConnection(Receiver(), bscInstance)
-sender.openConnection(Receiver(), gilbertInstance)
+sender.openConnection(Receiver(), bscInstance)
+#sender.openConnection(Receiver(), gilbertInstance)
 
-#sender.sendDataBSC(fileName)
-sender.sendDataGilbert(fileName)
+sender.sendDataBSC(fileName)
+#sender.sendDataGilbert(fileName)

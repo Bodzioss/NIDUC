@@ -23,7 +23,7 @@ class Sender():
         self._ackReceived = False
         self._ackSequence = 0
         self._ackWaitTime = ackWaitTime
-        self.sleepTime=0.2
+        self.sleepTime=0.1
         self.winSize = winSize
         self.base = 0
         self.nextSeqNum = 0
@@ -33,11 +33,14 @@ class Sender():
         self.end=0
         self.getPackets=0
         self.isInterupted=0
+        global counter
+
 
     def __call__(self, buff):
         while(True):
             if(self.sentPackets > len(buff)):
                 self.end=1
+                print("counter:" + str(counter))
                 break
             while (self.nextSeqNum < self.winSize and self.sentPackets <= len(buff)):
                 print("\nSend "+str(buff[self.sentPackets]))
@@ -60,6 +63,7 @@ class Sender():
 
 
     def sendDataBSC(self, inputFilename):
+        global counter
         with open(inputFilename) as inputFile:
             buff = inputFile.read()
         threading.Thread(target=self, args=(buff,)).start()
@@ -78,6 +82,7 @@ class Sender():
                     self.sentPackets+=1
             else:
                 print("Timeout: Back to base")
+                counter = counter + 1
                 self.isInterupted = self.nextSeqNum-1
                 self.nextSeqNum = 0
                 self.sentPackets = self.base
@@ -85,6 +90,7 @@ class Sender():
 
 
     def sendDataGilbert(self, inputFilename):
+        global counter
         with open(inputFilename) as inputFile:
             buff = inputFile.read()
         threading.Thread(target=self, args=(buff,)).start()
@@ -103,6 +109,7 @@ class Sender():
                     self.sentPackets += 1
             else:
                 print("Timeout: Back to base")
+                counter = counter + 1
                 self.isInterupted = self.nextSeqNum - 1
                 self.nextSeqNum = 0
                 self.sentPackets = self.base
@@ -189,19 +196,21 @@ class PrimitiveFrame:
 
 fileName = input("Input file name(in pwd): ")
 
-flowEfficiency = input("Bit flip chance(decimal): ")
-flipToGood = input("Flip to good state chance(decimal): ")
-flipToWrong = input("Flip to bad state chance(decimal): ")
+#flowEfficiency = input("Bit flip chance(decimal): ")
+#flipToGood = input("Flip to good state chance(decimal): ")
+#flipToWrong = input("Flip to bad state chance(decimal): ")
 windowSize = input("Window size: ")
-#bitFlipChance = input("Flip to bad state chance(decimal): ")
 
-#bscInstance = BinarySymmetricChannel(float(bitFlipChance))
-gilbertInstance = GilbertModel(float(flowEfficiency),float(flipToGood),float(flipToWrong))
+counter = 0
+bitFlipChance = input("Flip to bad state chance(decimal): ")
+
+bscInstance = BinarySymmetricChannel(float(bitFlipChance))
+#gilbertInstance = GilbertModel(float(flowEfficiency),float(flipToGood),float(flipToWrong))
 controller=Controller()
 sender = Sender(5,int(windowSize))
 
-#sender.openConnection(Receiver(), bscInstance)
-sender.openConnection(Receiver(), gilbertInstance)
+sender.openConnection(Receiver(), bscInstance)
+#sender.openConnection(Receiver(), gilbertInstance)
 
-#sender.sendDataBSC(fileName)
-sender.sendDataGilbert(fileName)
+sender.sendDataBSC(fileName)
+#sender.sendDataGilbert(fileName)
